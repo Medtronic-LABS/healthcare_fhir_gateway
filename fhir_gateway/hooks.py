@@ -196,6 +196,7 @@ scheduler_events = {
 		# safety net for the near-real-time job enqueued after each submit; also drives retries
 		"*/5 * * * *": ["fhir_gateway.sync.dispatcher.sweep_due_deliveries"],
 	},
+	"daily": ["fhir_gateway.sync.retention.purge_delivered_events"],
 }
 
 # Scheduled Tasks
