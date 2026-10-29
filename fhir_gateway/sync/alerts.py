@@ -7,9 +7,8 @@ can't undo the dead-letter it reports."""
 
 import os
 
-import requests
-
 import frappe
+import requests
 
 _TIMEOUT_SECONDS = 10
 

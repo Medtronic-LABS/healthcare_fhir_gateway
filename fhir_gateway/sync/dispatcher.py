@@ -13,9 +13,8 @@ deterministic RQ job id with deduplicate, and the row is locked (SELECT ... FOR 
 attempt, so a second worker waits and then sees a final status. The destination is still expected
 to be idempotent on the event-id header for whatever slips through."""
 
-import requests
-
 import frappe
+import requests
 from frappe.utils import add_to_date, now_datetime
 
 from fhir_gateway.sync import DELIVERY, DESTINATION, EVENT, alerts, auth
