@@ -55,5 +55,7 @@ def to_fhir(encounter, diagnosis_row):
 def _code(diagnosis_name):
 	coding = []
 	if diagnosis_name and frappe.db.exists(DIAGNOSIS_DOCTYPE, diagnosis_name):
-		coding = codification_to_coding(frappe.get_doc(DIAGNOSIS_DOCTYPE, diagnosis_name).codification_table)
+		coding = codification_to_coding(
+			frappe.get_cached_doc(DIAGNOSIS_DOCTYPE, diagnosis_name).codification_table
+		)
 	return {"coding": coding, "text": diagnosis_name} if coding else {"text": diagnosis_name}

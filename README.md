@@ -26,7 +26,8 @@ Besides the read API, the gateway pushes newly-**submitted** clinical records to
 
 **Configure a destination** (role **FHIR Sync Administrator**): create a *FHIR Sync Destination* with
 its base URL (`https://` required except for localhost), Basic-auth client ID/secret, the resource
-types it should receive, and any static headers such as `X-Facility-Id`. Each resource is `POST`ed to
+types it should receive, and any static headers such as `X-Facility-Id` (header values are stored in
+plain text — never put a credential there). Each resource is `POST`ed to
 `{base_url}/{resourceType}` with `X-Source-Event-Id` / `X-Correlation-Id` headers (names configurable,
 blank omits). Only records submitted after a destination exists are sent — there is no backfill, and
 cancellations/amendments are not propagated.
@@ -39,7 +40,7 @@ retries anything still due. Each *FHIR Sync Delivery* ends as:
   *Max Retry Attempts*), then `Dead-lettered`.
 - `Dead-lettered` — any other 4xx, or retries exhausted. A short summary (no patient data) is POSTed
   to the alert webhook: site config `alert_webhook_url`, else the `ALERT_WEBHOOK_URL` env var.
-  To retry one by hand, set its status back to `Pending`.
+  To retry one by hand, set its status back to `Pending` (this restores its full retry budget).
 
 A sync failure never blocks the clinical submit; it is recorded in the Error Log instead. Fully
 delivered events are purged daily after *FHIR Sync Settings → Retention Days* (default 30);

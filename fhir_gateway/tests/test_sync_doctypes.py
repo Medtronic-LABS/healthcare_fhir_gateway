@@ -64,6 +64,40 @@ class TestSyncDoctypes(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self._destination(base_url="openhim.example.org/fhir")
 
+	def test_timeout_and_retry_limits(self):
+		for fields in ({"timeout_seconds": 0}, {"timeout_seconds": 61}, {"max_retry_attempts": -1}):
+			with self.assertRaises(frappe.ValidationError, msg=fields):
+				self._destination(**fields)
+
+	def test_manual_replay_resets_retry_budget(self):
+		destination = self._destination()
+		event_id = frappe.generate_hash()
+		frappe.get_doc(
+			{
+				"doctype": "FHIR Sync Event",
+				"event_id": event_id,
+				"resource_type": "Encounter",
+				"source_doctype": "Patient Encounter",
+				"source_name": "X",
+				"fhir_payload": "{}",
+			}
+		).insert(ignore_permissions=True)
+		self._docs.append(("FHIR Sync Event", event_id))
+		delivery = frappe.get_doc(
+			{"doctype": "FHIR Sync Delivery", "sync_event": event_id, "destination": destination.name}
+		).insert(ignore_permissions=True)
+		self._docs.append(("FHIR Sync Delivery", delivery.name))
+		frappe.db.set_value(
+			"FHIR Sync Delivery", delivery.name, {"status": "Dead-lettered", "attempt_count": 7}
+		)
+
+		delivery.reload()
+		delivery.status = "Pending"
+		delivery.save(ignore_permissions=True)
+
+		self.assertEqual(delivery.attempt_count, 0)
+		self.assertTrue(delivery.next_attempt_at)
+
 	def test_defaults(self):
 		doc = self._destination()
 		self.assertEqual(doc.enabled, 1)

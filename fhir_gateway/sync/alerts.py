@@ -28,9 +28,13 @@ def notify_dead_letter(delivery, event, destination):
 	)
 	try:
 		requests.post(url, json={"text": text}, timeout=_TIMEOUT_SECONDS).raise_for_status()
-	except requests.RequestException:
+	except requests.RequestException as e:
+		# An explicit message, never the traceback: requests puts the full URL in its exception
+		# text, and for Slack-style webhooks the URL path *is* the credential.
+		status = getattr(e.response, "status_code", None)
 		frappe.log_error(
 			title="FHIR sync dead-letter alert failed",
+			message=f"{type(e).__name__}" + (f" (HTTP {status})" if status else ""),
 			reference_doctype=delivery.doctype,
 			reference_name=delivery.name,
 		)

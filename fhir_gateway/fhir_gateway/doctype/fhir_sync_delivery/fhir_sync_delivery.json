@@ -37,7 +37,7 @@
   },
   {
    "default": "Pending",
-   "description": "Set a Dead-lettered delivery back to Pending to have it retried.",
+   "description": "Set a Failed or Dead-lettered delivery back to Pending to retry it now, with a fresh retry budget.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -79,7 +79,7 @@
  ],
  "in_create": 1,
  "links": [],
- "modified": "2026-10-29 10:00:00.000000",
+ "modified": "2026-10-29 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "FHIR Gateway",
  "name": "FHIR Sync Delivery",

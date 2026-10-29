@@ -7,6 +7,7 @@ An event no destination wants is not stored at all: it would be a PHI-bearing pa
 to deliver it to."""
 
 import uuid
+from functools import partial
 
 import frappe
 from frappe.utils import now_datetime
@@ -14,26 +15,31 @@ from frappe.utils import now_datetime
 from fhir_gateway.sync import DELIVERY, DESTINATION, EVENT, dispatcher
 
 
-def new_correlation_id():
-	return str(uuid.uuid4())
-
-
-def destinations_for(resource_type):
-	return frappe.get_all(
-		DESTINATION,
-		filters=[
-			[DESTINATION, "enabled", "=", 1],
-			["FHIR Sync Destination Resource Type", "resource_type", "=", resource_type],
-		],
-		pluck="name",
-		distinct=True,
+def destinations_by_type(resource_types):
+	"""{resource_type: [destination names]} for enabled destinations -- resolved once per submit,
+	not once per event."""
+	enabled = frappe.get_all(DESTINATION, filters={"enabled": 1}, pluck="name")
+	if not enabled:
+		return {}
+	rows = frappe.get_all(
+		"FHIR Sync Destination Resource Type",
+		filters={
+			"parenttype": DESTINATION,
+			"parent": ["in", enabled],
+			"resource_type": ["in", list(set(resource_types))],
+		},
+		fields=["parent", "resource_type"],
 	)
+	by_type = {}
+	for row in rows:
+		by_type.setdefault(row.resource_type, set()).add(row.parent)
+	return {resource_type: sorted(names) for resource_type, names in by_type.items()}
 
 
-def enqueue_sync_event(resource_type, payload, source_doctype, source_name, correlation_id):
-	"""Returns the names of the Deliveries created ([] when no destination takes this type). The
-	caller schedules them with `schedule_deliveries` once everything it is writing has succeeded."""
-	destinations = destinations_for(resource_type)
+def enqueue_sync_event(resource_type, payload, source_doctype, source_name, correlation_id, destinations):
+	"""Writes the Event and one Delivery per name in `destinations`; returns the Delivery names
+	([] -- and nothing written -- when `destinations` is empty). The caller schedules them with
+	`schedule_deliveries` once everything it is writing has succeeded."""
 	if not destinations:
 		return []
 
@@ -67,8 +73,10 @@ def _insert_delivery(event_name, destination):
 
 
 def schedule_deliveries(delivery_names):
-	"""Near-real-time first attempt, once the submit's transaction commits. If a job is lost (worker
-	down, Redis flushed) the scheduler sweep picks the row up anyway -- `next_attempt_at` is already
-	due."""
+	"""Near-real-time first attempt, once the submit's transaction commits. Registered as our own
+	after-commit callback rather than `enqueue(enqueue_after_commit=True)`: Frappe runs those
+	callbacks unguarded inside commit(), and a queue error there would reach the clinician after
+	their record was already saved. `enqueue_attempt` never raises; anything it skips is already
+	due, so the scheduler sweep picks it up."""
 	for name in delivery_names:
-		dispatcher.enqueue_attempt(name, enqueue_after_commit=True)
+		frappe.db.after_commit.add(partial(dispatcher.enqueue_attempt, name))

@@ -63,6 +63,9 @@ class TestSyncDispatcher(unittest.TestCase):
 	def _reload(self, name):
 		return frappe.get_doc("FHIR Sync Delivery", name)
 
+	def _make_due(self, name):
+		frappe.db.set_value("FHIR Sync Delivery", name, "next_attempt_at", add_to_date(None, seconds=-1))
+
 	def test_2xx_marks_delivered_with_header_contract(self):
 		with LoopbackServer([201]) as server:
 			name = self._delivery(
@@ -148,6 +151,7 @@ class TestSyncDispatcher(unittest.TestCase):
 			name = self._delivery(server.url, max_retry_attempts=1)
 			dispatcher.attempt_delivery(name)  # first attempt
 			self.assertEqual(self._reload(name).status, "Failed")
+			self._make_due(name)
 			dispatcher.attempt_delivery(name)  # the one allowed retry
 
 		delivery = self._reload(name)
@@ -165,6 +169,86 @@ class TestSyncDispatcher(unittest.TestCase):
 		delivery = self._reload(name)
 		self.assertEqual(delivery.status, "Dead-lettered")
 		self.assertIn("Unsupported auth type", delivery.last_error)
+
+	def test_leased_row_is_skipped(self):
+		# another job claimed it moments ago
+		with LoopbackServer([200]) as server:
+			name = self._delivery(server.url, next_attempt_at=add_to_date(None, minutes=5))
+			dispatcher.attempt_delivery(name)
+
+		self.assertEqual(server.requests, [])
+		self.assertEqual(self._reload(name).attempt_count, 0)
+
+	def test_claim_counts_attempt_and_leases_before_sending(self):
+		seen = {}
+
+		def fake_post(destination, event):
+			seen.update(
+				frappe.db.get_value(
+					"FHIR Sync Delivery",
+					{"sync_event": event.name},
+					["attempt_count", "next_attempt_at"],
+					as_dict=True,
+				)
+			)
+			return dispatcher._DELIVERED, None
+
+		name = self._delivery(closed_port_url())
+		with patch.object(dispatcher, "_post", side_effect=fake_post):
+			dispatcher.attempt_delivery(name)
+
+		self.assertEqual(seen["attempt_count"], 1)
+		lease_floor = add_to_date(None, seconds=dispatcher.LEASE_SECONDS - 60)
+		self.assertGreater(get_datetime(seen["next_attempt_at"]), lease_floor)
+		self.assertEqual(self._reload(name).status, "Delivered")
+
+	def test_attempt_that_never_finished_dead_letters(self):
+		# a job killed mid-call counted its attempt but never recorded an outcome
+		with LoopbackServer([200]) as server, patch.object(alerts, "alert_webhook_url", return_value=None):
+			name = self._delivery(server.url, max_retry_attempts=2)
+			frappe.db.set_value("FHIR Sync Delivery", name, "attempt_count", 3)
+			dispatcher.attempt_delivery(name)
+
+		self.assertEqual(server.requests, [])
+		delivery = self._reload(name)
+		self.assertEqual(delivery.status, "Dead-lettered")
+		self.assertEqual(delivery.last_error, "Attempt did not complete")
+
+	def test_unsendable_requests_dead_letter_without_retry(self):
+		cases = [
+			({"Bad:Header": "x"}, "InvalidHeader"),
+			({"X-Facility-Name": "H\u00f4pital \u0939"}, "UnicodeEncodeError"),
+		]
+		for extra_headers, error in cases:
+			with patch.object(alerts, "alert_webhook_url", return_value=None):
+				name = self._delivery(closed_port_url(), extra_headers=extra_headers)
+				dispatcher.attempt_delivery(name)
+			delivery = self._reload(name)
+			self.assertEqual((delivery.status, delivery.last_error), ("Dead-lettered", error))
+
+	def test_failed_alert_does_not_log_webhook_url(self):
+		with LoopbackServer([400]) as server, LoopbackServer([404]) as alert:
+			webhook = alert.url + "/services/T000/B000/secret-token"
+			with patch.object(alerts, "alert_webhook_url", return_value=webhook):
+				name = self._delivery(server.url)
+				dispatcher.attempt_delivery(name)
+
+		log = frappe.get_last_doc("Error Log", filters={"reference_name": name})
+		self.assertEqual(log.method, "FHIR sync dead-letter alert failed")
+		self.assertIn("HTTP 404", log.error)
+		self.assertNotIn("secret-token", log.error)
+
+	def test_enqueue_attempt_never_raises(self):
+		with patch("frappe.enqueue", side_effect=ConnectionError("redis down")):
+			self.assertFalse(dispatcher.enqueue_attempt("any"))
+
+	def test_enqueue_attempt_leaves_headroom_in_shared_queue(self):
+		with (
+			patch.object(dispatcher, "get_queue", return_value=frappe._dict(count=10**6)),
+			patch("frappe.enqueue") as enqueue,
+		):
+			self.assertFalse(dispatcher.enqueue_attempt("any"))
+		enqueue.assert_not_called()
 
 	def test_noop_on_final_or_missing_row(self):
 		with LoopbackServer([200]) as server:

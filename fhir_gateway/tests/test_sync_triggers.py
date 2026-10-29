@@ -2,8 +2,8 @@
 Events and Deliveries behind, fanned out per destination resource_types -- and a failure anywhere in
 the sync path must leave the submit intact and no partial outbox rows.
 
-`frappe.enqueue` is patched so the after-commit delivery jobs are asserted rather than pushed to a
-real worker queue."""
+`dispatcher.enqueue_attempt` is patched so the after-commit delivery jobs are asserted rather than
+pushed to a real worker queue."""
 
 import json
 import unittest
@@ -20,8 +20,6 @@ from fhir_gateway.tests._support import (
 	make_patient,
 	make_sync_destination,
 )
-
-DISPATCH_METHOD = "fhir_gateway.sync.dispatcher.attempt_delivery"
 
 
 class TestSyncTriggers(unittest.TestCase):
@@ -41,8 +39,8 @@ class TestSyncTriggers(unittest.TestCase):
 				resource_types=["Encounter", "Condition", "Observation"],
 			)
 		)
-		enqueue_patcher = patch("frappe.enqueue")
-		self.enqueue = enqueue_patcher.start()
+		enqueue_patcher = patch("fhir_gateway.sync.dispatcher.enqueue_attempt")
+		self.enqueue_attempt = enqueue_patcher.start()
 		self.addCleanup(enqueue_patcher.stop)
 
 	def tearDown(self):
@@ -124,9 +122,8 @@ class TestSyncTriggers(unittest.TestCase):
 		)
 
 	def _scheduled_deliveries(self):
-		return [
-			c.kwargs["delivery_name"] for c in self.enqueue.call_args_list if c.args[0] == DISPATCH_METHOD
-		]
+		frappe.db.commit()  # first attempts are scheduled as after-commit callbacks
+		return [c.args[0] for c in self.enqueue_attempt.call_args_list]
 
 	def test_encounter_with_diagnoses_fans_out(self):
 		encounter = self._submit_encounter(diagnoses=["Sync Test Fever", "Sync Test Cough"])
@@ -193,6 +190,41 @@ class TestSyncTriggers(unittest.TestCase):
 		self.assertEqual(self._sync_errors_logged(encounter), 1)
 		self.assertFalse(self._events(source_name=encounter.name))
 		self.assertFalse(self._scheduled_deliveries())
+
+	def test_deadlock_is_not_swallowed(self):
+		# The database has already rolled back the whole transaction: the submit must fail loudly.
+		with (
+			patch("fhir_gateway.sync.outbox.enqueue_sync_event", side_effect=RuntimeError("deadlock")),
+			patch.object(frappe.db, "is_deadlocked", return_value=True),
+			self.assertRaises(RuntimeError),
+		):
+			self._submit_encounter()
+		frappe.db.rollback()
+
+	def test_records_of_one_encounter_share_a_correlation_id(self):
+		enc = frappe._dict(doctype="Patient Encounter", name="HLC-ENC-X")
+		linked = [
+			frappe._dict(doctype="Medication Request", name="HMR-1", order_group="HLC-ENC-X"),
+			frappe._dict(
+				doctype="Service Request",
+				name="HSR-1",
+				order_group="HLC-ENC-X",
+				order_group_doctype="Patient Encounter",
+			),
+			frappe._dict(doctype="Vital Signs", name="VS-1", encounter="HLC-ENC-X"),
+			frappe._dict(
+				doctype="Observation",
+				name="OBS-1",
+				reference_doctype="Patient Encounter",
+				reference_docname="HLC-ENC-X",
+			),
+		]
+		expected = triggers.correlation_id_for(enc)
+		uuid.UUID(expected)
+		for doc in linked:
+			self.assertEqual(triggers.correlation_id_for(doc), expected, doc.doctype)
+		standalone = frappe._dict(doctype="Vital Signs", name="VS-2", encounter=None)
+		self.assertNotEqual(triggers.correlation_id_for(standalone), triggers.correlation_id_for(standalone))
 
 	def test_build_events_per_doctype(self):
 		vitals = frappe._dict(
