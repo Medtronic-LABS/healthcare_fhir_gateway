@@ -1,0 +1,41 @@
+{
+ "actions": [],
+ "creation": "2026-10-29 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "retention_days"
+ ],
+ "fields": [
+  {
+   "default": "30",
+   "description": "Fully delivered sync events older than this are purged daily. Dead-lettered ones are never purged.",
+   "fieldname": "retention_days",
+   "fieldtype": "Int",
+   "label": "Retention Days",
+   "non_negative": 1
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-29 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FHIR Gateway",
+ "name": "FHIR Sync Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 0,
+   "print": 1,
+   "read": 1,
+   "role": "FHIR Sync Administrator",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

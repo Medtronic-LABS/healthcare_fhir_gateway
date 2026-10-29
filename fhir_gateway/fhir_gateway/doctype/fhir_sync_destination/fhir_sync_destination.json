@@ -1,0 +1,150 @@
+{
+ "actions": [],
+ "autoname": "field:destination_name",
+ "creation": "2026-10-29 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "destination_name",
+  "enabled",
+  "base_url",
+  "column_break_main",
+  "auth_type",
+  "client_id",
+  "client_secret",
+  "section_delivery",
+  "resource_types",
+  "timeout_seconds",
+  "max_retry_attempts",
+  "section_headers",
+  "event_id_header_name",
+  "correlation_id_header_name",
+  "extra_headers"
+ ],
+ "fields": [
+  {
+   "fieldname": "destination_name",
+   "fieldtype": "Data",
+   "label": "Destination Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "description": "Resources are POSTed to {base_url}/{resource_type}. Must be https:// except for localhost.",
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Base URL",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Basic",
+   "fieldname": "auth_type",
+   "fieldtype": "Select",
+   "label": "Auth Type",
+   "options": "Basic",
+   "reqd": 1
+  },
+  {
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "label": "Client ID"
+  },
+  {
+   "fieldname": "client_secret",
+   "fieldtype": "Password",
+   "label": "Client Secret"
+  },
+  {
+   "fieldname": "section_delivery",
+   "fieldtype": "Section Break",
+   "label": "Delivery"
+  },
+  {
+   "description": "Which FHIR resource types this destination receives.",
+   "fieldname": "resource_types",
+   "fieldtype": "Table",
+   "label": "Resource Types",
+   "options": "FHIR Sync Destination Resource Type",
+   "reqd": 1
+  },
+  {
+   "default": "10",
+   "fieldname": "timeout_seconds",
+   "fieldtype": "Int",
+   "label": "Timeout Seconds",
+   "non_negative": 1
+  },
+  {
+   "default": "6",
+   "fieldname": "max_retry_attempts",
+   "fieldtype": "Int",
+   "label": "Max Retry Attempts",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "section_headers",
+   "fieldtype": "Section Break",
+   "label": "Headers"
+  },
+  {
+   "default": "X-Source-Event-Id",
+   "description": "Leave blank to omit this header.",
+   "fieldname": "event_id_header_name",
+   "fieldtype": "Data",
+   "label": "Event ID Header Name"
+  },
+  {
+   "default": "X-Correlation-Id",
+   "description": "Leave blank to omit this header.",
+   "fieldname": "correlation_id_header_name",
+   "fieldtype": "Data",
+   "label": "Correlation ID Header Name"
+  },
+  {
+   "description": "Static headers sent with every request, e.g. X-Facility-Id.",
+   "fieldname": "extra_headers",
+   "fieldtype": "Table",
+   "label": "Extra Headers",
+   "options": "FHIR Sync Destination Header"
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-29 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FHIR Gateway",
+ "name": "FHIR Sync Destination",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "FHIR Sync Administrator",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "destination_name",
+ "track_changes": 1
+}

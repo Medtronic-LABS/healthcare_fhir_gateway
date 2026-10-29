@@ -88,3 +88,23 @@ def ensure_appointment_type():
 		return doc.name
 
 	return ensure_any("Appointment Type", create)
+
+
+def make_sync_destination(resource_types=None, extra_headers=None, client_secret="s3cret", **fields):
+	"""Insert a `FHIR Sync Destination`. `resource_types` is a plain list of FHIR type names and
+	`extra_headers` a {name: value} dict -- both become their child-table rows."""
+	values = {
+		"doctype": "FHIR Sync Destination",
+		"destination_name": "Test Destination",
+		"base_url": "http://localhost:1/fhir",
+		"client_id": "cid",
+		"client_secret": client_secret,
+	}
+	values.update(fields)
+	values["resource_types"] = [{"resource_type": t} for t in (resource_types or ["Encounter"])]
+	values["extra_headers"] = [
+		{"header_name": k, "header_value": v} for k, v in (extra_headers or {}).items()
+	]
+	doc = frappe.get_doc(values)
+	doc.insert(ignore_permissions=True)
+	return doc

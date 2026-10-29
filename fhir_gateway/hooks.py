@@ -101,7 +101,7 @@ page_renderer = ["fhir_gateway.renderer.FHIRPageRenderer"]
 # both have hundreds of unrelated site-wide records, so a bare name would make `bench
 # export-fixtures` dump every role/permission on the site into this app.
 fixtures = [
-	{"dt": "Role", "filters": [["name", "=", "FHIR Integration"]]},
+	{"dt": "Role", "filters": [["name", "in", ["FHIR Integration", "FHIR Sync Administrator"]]]},
 	{"dt": "Custom DocPerm", "filters": [["role", "=", "FHIR Integration"]]},
 ]
 
