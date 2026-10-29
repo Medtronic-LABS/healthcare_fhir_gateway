@@ -7,7 +7,7 @@ one Observation per reading. `observation.py` is the public resourceType surface
 builds the resource for a Vital Signs source row.
 """
 
-from fhir_gateway.mappers._shared import as_float, as_str_datetime
+from fhir_gateway.mappers._shared import as_float, as_str_datetime, combine_date_time
 
 DOCTYPE = "Vital Signs"
 
@@ -68,13 +68,11 @@ def to_fhir(doc):
 			}
 		],
 		"code": {
-			"coding": [
-				{"system": "http://loinc.org", "code": "85353-1", "display": "Vital signs panel"}
-			]
+			"coding": [{"system": "http://loinc.org", "code": "85353-1", "display": "Vital signs panel"}]
 		},
 		"subject": {"reference": f"Patient/{doc.patient}"},
 	}
-	effective = _combine_date_time(doc.signs_date, doc.signs_time)
+	effective = combine_date_time(doc.signs_date, doc.signs_time)
 	if effective:
 		resource["effectiveDateTime"] = effective
 	if doc.encounter:
@@ -84,11 +82,3 @@ def to_fhir(doc):
 	if doc.modified:
 		resource["meta"] = {"lastUpdated": as_str_datetime(doc.modified)}
 	return resource
-
-
-def _combine_date_time(date_val, time_val):
-	if not date_val:
-		return None
-	if time_val:
-		return f"{date_val}T{time_val}"
-	return str(date_val)
