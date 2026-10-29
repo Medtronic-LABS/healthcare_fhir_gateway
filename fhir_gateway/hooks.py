@@ -184,6 +184,13 @@ fixtures = [
 # 	}
 # }
 
+# Outbound sync: every submitted clinical record is mapped to FHIR and queued for configured
+# destinations (fhir_gateway/sync/). Must stay in step with sync.triggers._BUILDERS.
+doc_events = {
+	doctype: {"on_submit": "fhir_gateway.sync.triggers.on_submit"}
+	for doctype in ("Patient Encounter", "Observation", "Vital Signs", "Medication Request", "Service Request")
+}
+
 # Scheduled Tasks
 # ---------------
 
