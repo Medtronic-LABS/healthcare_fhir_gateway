@@ -1,6 +1,10 @@
 """Shared test helpers used across fhir_gateway's test modules. Not itself a test module -- Frappe's
 test runner only discovers test_*.py files, so this is never collected or run directly."""
 
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
 import frappe
 
 
@@ -108,3 +112,54 @@ def make_sync_destination(resource_types=None, extra_headers=None, client_secret
 	doc = frappe.get_doc(values)
 	doc.insert(ignore_permissions=True)
 	return doc
+
+
+class LoopbackServer:
+	"""A real HTTP server on 127.0.0.1 standing in for a destination (or the alert webhook): real
+	requests over the wire, just not to a third party. Answers with `status_codes` in order (the
+	last one repeats) and records every request as {path, headers, body}.
+
+	with LoopbackServer([500, 200]) as server:
+	        ... server.url ... server.requests
+	"""
+
+	def __init__(self, status_codes=(200,)):
+		self.status_codes = list(status_codes)
+		self.requests = []
+
+	def __enter__(self):
+		outer = self
+
+		class Handler(BaseHTTPRequestHandler):
+			def do_POST(self):
+				length = int(self.headers.get("Content-Length") or 0)
+				body = self.rfile.read(length).decode()
+				outer.requests.append({"path": self.path, "headers": dict(self.headers), "body": body})
+				index = min(len(outer.requests), len(outer.status_codes)) - 1
+				self.send_response(outer.status_codes[index])
+				self.send_header("Content-Type", "application/json")
+				self.end_headers()
+				self.wfile.write(json.dumps({"ok": True}).encode())
+
+			def log_message(self, *args):
+				pass
+
+		self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+		self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+		self._thread.start()
+		return self
+
+	def __exit__(self, *exc):
+		self._server.shutdown()
+		self._server.server_close()
+
+	@property
+	def url(self):
+		return f"http://127.0.0.1:{self._server.server_address[1]}"
+
+
+def closed_port_url():
+	"""A localhost URL nothing listens on -- for connection-refused paths."""
+	with LoopbackServer() as server:
+		url = server.url
+	return url

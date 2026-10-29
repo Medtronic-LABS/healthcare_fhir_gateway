@@ -191,6 +191,13 @@ doc_events = {
 	for doctype in ("Patient Encounter", "Observation", "Vital Signs", "Medication Request", "Service Request")
 }
 
+scheduler_events = {
+	"cron": {
+		# safety net for the near-real-time job enqueued after each submit; also drives retries
+		"*/5 * * * *": ["fhir_gateway.sync.dispatcher.sweep_due_deliveries"],
+	},
+}
+
 # Scheduled Tasks
 # ---------------
 

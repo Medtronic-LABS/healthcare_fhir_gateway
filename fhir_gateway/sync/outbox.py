@@ -11,10 +11,7 @@ import uuid
 import frappe
 from frappe.utils import now_datetime
 
-DESTINATION = "FHIR Sync Destination"
-EVENT = "FHIR Sync Event"
-DELIVERY = "FHIR Sync Delivery"
-DISPATCH_METHOD = "fhir_gateway.sync.dispatcher.attempt_delivery"
+from fhir_gateway.sync import DELIVERY, DESTINATION, EVENT, dispatcher
 
 
 def new_correlation_id():
@@ -74,4 +71,4 @@ def schedule_deliveries(delivery_names):
 	down, Redis flushed) the scheduler sweep picks the row up anyway -- `next_attempt_at` is already
 	due."""
 	for name in delivery_names:
-		frappe.enqueue(DISPATCH_METHOD, queue="short", enqueue_after_commit=True, delivery_name=name)
+		dispatcher.enqueue_attempt(name, enqueue_after_commit=True)
