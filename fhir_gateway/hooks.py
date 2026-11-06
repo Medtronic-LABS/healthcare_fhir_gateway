@@ -101,7 +101,7 @@ page_renderer = ["fhir_gateway.renderer.FHIRPageRenderer"]
 # both have hundreds of unrelated site-wide records, so a bare name would make `bench
 # export-fixtures` dump every role/permission on the site into this app.
 fixtures = [
-	{"dt": "Role", "filters": [["name", "=", "FHIR Integration"]]},
+	{"dt": "Role", "filters": [["name", "in", ["FHIR Integration", "FHIR Sync Administrator"]]]},
 	{"dt": "Custom DocPerm", "filters": [["role", "=", "FHIR Integration"]]},
 ]
 
@@ -183,6 +183,21 @@ fixtures = [
 # 		"on_trash": "method"
 # 	}
 # }
+
+# Outbound sync: every submitted clinical record is mapped to FHIR and queued for configured
+# destinations (fhir_gateway/sync/). Must stay in step with sync.triggers._BUILDERS.
+doc_events = {
+	doctype: {"on_submit": "fhir_gateway.sync.triggers.on_submit"}
+	for doctype in ("Patient Encounter", "Observation", "Vital Signs", "Medication Request", "Service Request")
+}
+
+scheduler_events = {
+	"cron": {
+		# safety net for the near-real-time job enqueued after each submit; also drives retries
+		"*/5 * * * *": ["fhir_gateway.sync.dispatcher.sweep_due_deliveries"],
+	},
+	"daily": ["fhir_gateway.sync.retention.purge_delivered_events"],
+}
 
 # Scheduled Tasks
 # ---------------

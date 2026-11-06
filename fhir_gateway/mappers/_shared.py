@@ -28,6 +28,22 @@ def code_value_string(code_value_name):
 	return frappe.db.get_value("Code Value", code_value_name, "code_value")
 
 
+def fhir_enum_code(value):
+	"""Normalize a resolved Code Value string into FHIR's exact code casing.
+
+	Verified against the live data: `healthcare`'s "Medication Request Status" and "Request Status"
+	Code Value entries are already correctly lowercase-hyphenated ("active", "entered-in-error"),
+	but its "Intent" and
+	"Priority" Code Systems -- despite being correctly flagged `is_fhir_defined` with the right
+	canonical `uri` -- store Title-Case display labels as `code_value` ("Original Order", "Routine"),
+	not the actual FHIR enum code ("original-order", "routine"). Lowercasing + dashing spaces is a
+	safe, lossless fix here because this label *is* the FHIR code's display form, and is a no-op on
+	already-correct values like "active"."""
+	if not value:
+		return None
+	return value.lower().replace(" ", "-")
+
+
 def get_doc(doctype, name):
 	"""Shared `read` implementation every mapper's `get()` delegates to."""
 	if not frappe.db.exists(doctype, name):
@@ -87,3 +103,13 @@ def as_str_datetime(value):
 	if not value:
 		return None
 	return str(value).replace(" ", "T")
+
+
+def combine_date_time(date_val, time_val):
+	"""Frappe keeps a record's date and time in two fields (e.g. `encounter_date`/`encounter_time`);
+	FHIR wants one dateTime. Falls back to the bare date when no time was recorded."""
+	if not date_val:
+		return None
+	if time_val:
+		return f"{date_val}T{time_val}"
+	return str(date_val)

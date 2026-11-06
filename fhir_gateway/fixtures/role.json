@@ -5,5 +5,12 @@
     "role_name": "FHIR Integration",
     "desk_access": 0,
     "custom": 1
+  },
+  {
+    "doctype": "Role",
+    "name": "FHIR Sync Administrator",
+    "role_name": "FHIR Sync Administrator",
+    "desk_access": 1,
+    "custom": 1
   }
 ]

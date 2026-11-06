@@ -102,7 +102,7 @@ One per submitted source record — the outbox row. `autoname: field:event_id`.
 | Field | Type | Notes |
 |---|---|---|
 | `event_id` | Data, unique (UUID) | also the docname |
-| `correlation_id` | Data (UUID) | |
+| `correlation_id` | Data (UUID) | shared by every record of one Patient Encounter (UUIDv5 of the encounter name); random otherwise |
 | `resource_type` | Select: Encounter / Observation / Condition / MedicationRequest / ServiceRequest | |
 | `source_doctype` | Data | traceability only, never re-read to regenerate the payload |
 | `source_name` | Data | |
@@ -185,9 +185,20 @@ Exceptions are caught narrowly: `requests.exceptions.RequestException` (network/
 distinguished from inspecting `response.status_code` for HTTP-level outcomes. `last_error` holds a
 short reason, never a full traceback or a secret.
 
-Race handling is deliberately light: the immediate job and a sweep tick could grab the same row in a
-narrow window. Not worth locking machinery for v1 — `X-Source-Event-Id` exists precisely so the
-destination is expected to be idempotent on it; an occasional double-send is wasteful, not harmful.
+Race handling (revised after code review, 2026-10-29): each attempt first *claims* the row in its
+own short transaction — it increments `attempt_count` and pushes `next_attempt_at` out by a lease
+(600 s, longer than the `short` queue's 300 s job timeout), then commits. No lock is held during the
+HTTP call. A second job for the same row sees the lease and backs off; a job killed mid-call leaves
+the row to be re-picked when the lease expires, and since the attempt was already counted, a row that
+keeps dying is dead-lettered ("Attempt did not complete") instead of retried forever. Both the
+immediate job and the sweep enqueue under one deterministic RQ job id with `deduplicate`.
+`X-Source-Event-Id` still lets the destination be idempotent on whatever slips through.
+
+Queue safety: the immediate job is scheduled from our own after-commit callback and
+`enqueue_attempt` never raises (Frappe runs after-commit callbacks unguarded inside `commit()`, so a
+Redis/queue error would otherwise surface to the clinician after their record was saved). It also
+skips enqueueing while the shared `short` queue is past half of Frappe's `MAX_QUEUED_JOBS`; skipped
+rows are already due, so the sweep picks them up. The sweep takes at most 50 rows per tick.
 
 Granularity is one background job per delivery attempt, not batched.
 
@@ -258,7 +269,8 @@ All of this runs through the `bench run-tests --app fhir_gateway` call already w
 - **Auth schemes beyond Basic** — the registry is built to add them; nothing beyond `Basic` is
   implemented.
 - **Manual replay/retry UI** — a `Dead-lettered` row can be manually flipped back to `Pending` from
-  the plain doctype list view and the sweep will pick it up; no dedicated retry UI is built.
+  the plain doctype form (which resets its retry budget and makes it due now) and the sweep will pick
+  it up; no dedicated retry UI is built.
 - **Historical backfill** — nothing retroactively pushes records submitted before this feature
   existed.
 - **Multi-facility routing** — `X-Facility-Id` (or equivalent) is a static value per destination,
@@ -271,8 +283,8 @@ All of this runs through the `bench run-tests --app fhir_gateway` call already w
 ## Assumptions carried forward (confirm if they turn out wrong)
 
 - The backoff schedule and `retention_days` default are reasonable starting points, not values
-  derived from any SLA — both are configuration (destination fields / `FHIR Sync Settings`), so
-  they're adjustable without a code change if they prove wrong.
+  derived from any SLA. `retention_days`, `max_retry_attempts` and `timeout_seconds` are
+  configuration; the backoff schedule itself is a code constant (`dispatcher.BACKOFF_SECONDS`).
 - `X-Facility-Id`, header names, and the exact channel URL shape are configured per destination
   (not hardcoded), so if the real production OpenHIM contract differs in some detail from the
   reference collection, it's a configuration change, not a design change.

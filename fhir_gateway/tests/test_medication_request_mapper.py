@@ -5,7 +5,7 @@ Real `Code Value` records ARE used for status/intent/priority though, since `cod
 whole job is resolving a real Link value -- faking that would test nothing. This is also the test
 that caught a real data-quality bug: healthcare's "Intent"/"Priority" Code Value rows store
 Title-Case display labels ("Original Order", "Routine"), not the actual FHIR enum code
-("original-order", "routine") -- see `_fhir_enum_code`'s docstring in the mapper."""
+("original-order", "routine") -- see `fhir_enum_code`'s docstring in mappers/_shared.py."""
 
 import unittest
 

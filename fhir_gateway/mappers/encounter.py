@@ -5,6 +5,7 @@ from functools import partial
 from fhir_gateway.mappers._shared import (
 	as_str_datetime,
 	codification_to_coding,
+	combine_date_time,
 	get_doc,
 	search_docs,
 	strip_fhir_date_prefix,
@@ -51,7 +52,7 @@ def to_fhir(doc):
 		resource["participant"] = [participant]
 	if doc.appointment:
 		resource["appointment"] = [{"reference": f"Appointment/{doc.appointment}"}]
-	start = _combine_date_time(doc.encounter_date, doc.encounter_time)
+	start = combine_date_time(doc.encounter_date, doc.encounter_time)
 	if start:
 		resource["period"] = {"start": start}
 	coding = codification_to_coding(doc.codification_table)
@@ -60,14 +61,6 @@ def to_fhir(doc):
 	if doc.modified:
 		resource["meta"] = {"lastUpdated": as_str_datetime(doc.modified)}
 	return resource
-
-
-def _combine_date_time(date_val, time_val):
-	if not date_val:
-		return None
-	if time_val:
-		return f"{date_val}T{time_val}"
-	return str(date_val)
 
 
 def build_filters(args):
