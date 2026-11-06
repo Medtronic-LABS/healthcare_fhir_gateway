@@ -7,6 +7,7 @@ import unittest
 import frappe
 
 from fhir_gateway.mappers import condition as condition_mapper
+from fhir_gateway.tests._support import ensure_code_system
 
 ENCOUNTER = frappe._dict(
 	doctype="Patient Encounter",
@@ -29,9 +30,10 @@ class TestConditionMapper(unittest.TestCase):
 		frappe.db.commit()
 
 	def _ensure_icd10_code(self, code, display):
-		"""ICD-10 (the Code System) is seeded by healthcare; individual codes aren't, so seed one --
-		a Codification Table row must link a real Code Value, and its `code`/`display`/`system` are
-		fetched from it."""
+		"""A Codification Table row must link a real Code Value (its `code`/`display`/`system` are
+		fetched from it), and that Code Value a real Code System -- neither exists on a fresh site."""
+		if ensure_code_system("ICD-10", "http://hl7.org/fhir/sid/icd-10"):
+			self._docs.append(("Code System", "ICD-10"))
 		name = f"{code}-ICD-10"
 		if not frappe.db.exists("Code Value", name):
 			frappe.get_doc(

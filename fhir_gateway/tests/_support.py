@@ -39,6 +39,18 @@ def make_practitioner(**fields):
 	return doc
 
 
+def ensure_code_system(name, uri):
+	"""Idempotently ensure a Code System exists; returns True if this call created it. Healthcare
+	seeds its Code Systems (ICD-10, LOINC, ...) only through its setup wizard, never run on a
+	headless CI site, so a codification test must seed the one it links to."""
+	if frappe.db.exists("Code System", name):
+		return False
+	frappe.get_doc({"doctype": "Code System", "code_system": name, "uri": uri}).insert(
+		ignore_permissions=True
+	)
+	return True
+
+
 def ensure_any(doctype, creator):
 	"""Return the name of any existing record of `doctype`, or create one via `creator()` if none
 	exist. For reference/lookup data a test incidentally depends on (Company, Appointment Type,
